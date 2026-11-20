@@ -1,4 +1,4 @@
-const CACHE_NAME = 'farm-reports-hub-v5';
+const CACHE_NAME = 'farm-reports-hub-v6';
 
 const CORE_ASSETS = [
   './',
@@ -12,6 +12,7 @@ const CORE_ASSETS = [
   './data/reports-index.js',
   './data/reports/sharqia-calves.js',
   './data/reports/sharqia-baladi-bulls.js',
+  './data/reports/menoufia-beef-dairy-2026.js',
   'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
 ];
 
