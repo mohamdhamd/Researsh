@@ -211,14 +211,87 @@
     return { html: html.join('\n'), toc };
   }
 
-  /* ---------- 4. عرض مكتبة التقارير وتحميل أي تقرير ديناميكيًا ---------- */
+  /* ---------- 4. حفظ موضع القراءة + عرض مكتبة التقارير ---------- */
+  const READ_POS_KEY = 'farm_read_pos_v1';
+  const LAST_REP_KEY = 'farm_last_report_v1';
+  const NOTES_KEY = 'farm_notes_v1';
+
+  function getReadPositions() {
+    try { return JSON.parse(localStorage.getItem(READ_POS_KEY) || '{}'); } catch (_) { return {}; }
+  }
+
+  function getCurrentSectionInfo() {
+    const headings = $('report-body').querySelectorAll('h2[id], h3[id]');
+    let secId = '';
+    let secTitle = '';
+    for (const h of headings) {
+      if (h.getBoundingClientRect().top <= 120) {
+        secId = h.id;
+        secTitle = h.textContent.trim();
+      } else {
+        break;
+      }
+    }
+    return { secId, secTitle };
+  }
+
+  function saveReadPosition() {
+    if (!currentReport || $('reader-view').hidden || $('tab-content').hidden) return;
+    const docH = document.documentElement.scrollHeight - window.innerHeight;
+    const pct = docH > 0 ? Math.round(Math.min(100, Math.max(0, (window.scrollY / docH) * 100))) : 0;
+    const { secId, secTitle } = getCurrentSectionInfo();
+    const positions = getReadPositions();
+    positions[currentReport.meta.id] = {
+      scrollY: Math.round(window.scrollY),
+      pct,
+      secId,
+      secTitle: secTitle || currentReport.title,
+      updatedAt: Date.now()
+    };
+    localStorage.setItem(READ_POS_KEY, JSON.stringify(positions));
+    localStorage.setItem(LAST_REP_KEY, JSON.stringify({
+      id: currentReport.meta.id,
+      title: currentReport.meta.title,
+      secTitle: secTitle || currentReport.meta.title,
+      pct,
+      updatedAt: Date.now()
+    }));
+  }
+
+  function renderResumeLastCard() {
+    const box = $('resume-last-card');
+    if (!box) return;
+    let last = null;
+    try { last = JSON.parse(localStorage.getItem(LAST_REP_KEY) || 'null'); } catch (_) {}
+    if (!last || !last.id || last.pct < 2) {
+      box.hidden = true;
+      return;
+    }
+    const meta = (window.REPORTS_INDEX || []).find((r) => r.id === last.id);
+    if (!meta) { box.hidden = true; return; }
+    box.hidden = false;
+    box.innerHTML = `
+      <div class="resume-last-info">
+        <span class="resume-badge">📖 استكمال من حيث توقفت (${last.pct}%)</span>
+        <h3>${escapeHtml(meta.title)}</h3>
+        <div class="resume-last-meta">📍 آخر قسم: ${escapeHtml(last.secTitle || '')}</div>
+      </div>
+      <button type="button" id="btn-resume-last" class="btn-solid">استكمال القراءة ←</button>
+    `;
+    $('btn-resume-last').addEventListener('click', () => openReport(meta, true));
+  }
+
   function renderLibrary() {
+    renderResumeLastCard();
     const list = window.REPORTS_INDEX || [];
+    const positions = getReadPositions();
     $('reports-count').textContent = `${list.length} تقرير`;
     const grid = $('reports-grid');
     grid.innerHTML = '';
 
     list.forEach((meta) => {
+      const pos = positions[meta.id];
+      const hasProg = pos && pos.pct >= 2;
       const card = document.createElement('article');
       card.className = 'report-card';
       card.innerHTML = `
@@ -228,14 +301,20 @@
         </div>
         <h3>${escapeHtml(meta.title)}</h3>
         <p>${escapeHtml(meta.summary)}</p>
+        ${hasProg ? `
+          <div class="card-progress">
+            <div class="card-progress-text">📍 وصلت إلى: ${escapeHtml((pos.secTitle || '').slice(0, 46))} (${pos.pct}%)</div>
+            <div class="card-progress-track"><div class="card-progress-fill" style="width:${pos.pct}%"></div></div>
+          </div>
+        ` : ''}
         <div class="report-card-meta">
           <span>📚 ${meta.chaptersCount || 15} فصلًا</span>
           <span>💬 ${meta.termsCount || 40}+ شرح بالعامية</span>
           ${meta.has3D ? '<span>🏗️ مجسم 3D</span>' : ''}
         </div>
-        <div class="report-card-cta">فتح التقرير كامل ←</div>
+        <div class="report-card-cta">${hasProg ? 'استكمال القراءة أو الفتح ←' : 'فتح التقرير كامل ←'}</div>
       `;
-      card.addEventListener('click', () => openReport(meta));
+      card.addEventListener('click', () => openReport(meta, false));
       grid.appendChild(card);
     });
   }
@@ -250,7 +329,7 @@
     });
   }
 
-  async function openReport(meta) {
+  async function openReport(meta, autoResume = false) {
     try {
       if (!window.REPORTS_DATA[meta.id]) {
         await loadScriptDynamic(meta.file);
@@ -261,11 +340,13 @@
 
       // إظهار واجهة القراءة وإغلاق الفهرس افتراضيًا على الموبايل
       closeTOC();
+      hideSelectionToolbar();
       document.body.classList.add('is-reading');
       $('library-view').hidden = true;
       $('reader-view').hidden = false;
       $('btn-toc').hidden = false;
       $('btn-back-home').hidden = false;
+      $('btn-notes').hidden = false;
       $('btn-glossary').hidden = false;
       $('btn-export').hidden = false;
       $('read-progress-wrap').hidden = false;
@@ -286,8 +367,34 @@
       $('report-body').innerHTML = html;
       renderTOC(toc);
       renderGlossaryList('');
+      updateNotesBadge();
       switchTab('content');
-      window.scrollTo({ top: 0, behavior: 'instant' });
+
+      const savedPos = getReadPositions()[meta.id];
+      const banner = $('report-resume-banner');
+      if (autoResume && savedPos && savedPos.scrollY > 120) {
+        banner.hidden = true;
+        setTimeout(() => window.scrollTo({ top: savedPos.scrollY, behavior: 'smooth' }), 60);
+      } else {
+        window.scrollTo({ top: 0, behavior: 'instant' });
+        if (savedPos && savedPos.scrollY > 150 && savedPos.pct >= 2) {
+          banner.hidden = false;
+          banner.innerHTML = `
+            <span>📍 توقفت سابقًا عند: <strong>${escapeHtml(savedPos.secTitle || '')}</strong> (${savedPos.pct}%)</span>
+            <div class="resume-actions">
+              <button type="button" id="btn-jump-saved" class="btn-solid">استكمال من هنا</button>
+              <button type="button" id="btn-dismiss-resume" class="btn-outline">من البداية</button>
+            </div>
+          `;
+          $('btn-jump-saved').addEventListener('click', () => {
+            banner.hidden = true;
+            window.scrollTo({ top: savedPos.scrollY, behavior: 'smooth' });
+          });
+          $('btn-dismiss-resume').addEventListener('click', () => { banner.hidden = true; });
+        } else {
+          banner.hidden = true;
+        }
+      }
       history.replaceState(null, '', '#' + meta.id);
     } catch (err) {
       showToast('❌ ' + err.message, 4000);
@@ -295,16 +402,20 @@
   }
 
   function showLibrary() {
+    saveReadPosition();
+    hideSelectionToolbar();
     if (window.BarnScene3D) window.BarnScene3D.stop();
     document.body.classList.remove('is-reading');
     $('reader-view').hidden = true;
     $('library-view').hidden = false;
     $('btn-toc').hidden = true;
     $('btn-back-home').hidden = true;
+    $('btn-notes').hidden = true;
     $('btn-glossary').hidden = true;
     $('btn-export').hidden = true;
     $('read-progress-wrap').hidden = true;
     closeTOC();
+    renderLibrary();
     history.replaceState(null, '', '#');
   }
 
@@ -767,7 +878,208 @@ $('btn-theme').onclick=()=>{
     showToast('✅ نزل الملف على جهازك — تقدر تفتحه أو تبعته واتساب ويشتغل أوفلاين بالبوب-أب!', 4000);
   }
 
-  /* ---------- 10. تهيئة الأحداث عند تشغيل الصفحة ---------- */
+  /* ---------- 10. شريط التحديد العائم والملاحظات وAI ---------- */
+  let selectedTextCache = '';
+
+  function copyText(text) {
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      return navigator.clipboard.writeText(text).catch(() => fallbackCopy(text));
+    }
+    return fallbackCopy(text);
+  }
+
+  function fallbackCopy(text) {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); } catch (_) {}
+    document.body.removeChild(ta);
+    return Promise.resolve();
+  }
+
+  function getNotes() {
+    try { return JSON.parse(localStorage.getItem(NOTES_KEY) || '[]'); } catch (_) { return []; }
+  }
+
+  function saveNotes(list) {
+    localStorage.setItem(NOTES_KEY, JSON.stringify(list));
+    updateNotesBadge();
+  }
+
+  function updateNotesBadge() {
+    const lbl = $('notes-btn-label');
+    if (!lbl) return;
+    const all = getNotes();
+    const count = currentReport ? all.filter((n) => n.reportId === currentReport.meta.id).length : all.length;
+    lbl.textContent = count > 0 ? `الملاحظات (${count})` : 'الملاحظات';
+  }
+
+  function renderNotesList() {
+    const container = $('notes-list');
+    if (!container) return;
+    const all = getNotes();
+    const list = currentReport ? all.filter((n) => n.reportId === currentReport.meta.id) : all;
+    if (!list.length) {
+      container.innerHTML = '<p class="muted" style="text-align:center;padding:20px 0">لا توجد ملاحظات محفوظة لهذا التقرير بعد. حدّد أي نص داخل التقرير واضغط «+ الملاحظات».</p>';
+      return;
+    }
+    container.innerHTML = list.map((n) => `
+      <div class="note-card">
+        <div class="note-card-head">
+          <span>📌 ${escapeHtml(n.secTitle || 'مقتطف')}</span>
+          <span>${new Date(n.createdAt).toLocaleDateString('ar-EG')}</span>
+        </div>
+        <p class="note-card-text">${escapeHtml(n.text)}</p>
+        <div class="note-card-actions">
+          <button type="button" class="btn-outline small note-copy-btn" data-nid="${n.id}">📋 نسخ</button>
+          <button type="button" class="btn-outline small note-del-btn" data-nid="${n.id}" style="color:var(--danger)">🗑️ حذف</button>
+        </div>
+      </div>
+    `).join('');
+
+    container.querySelectorAll('.note-copy-btn').forEach((b) => {
+      b.addEventListener('click', () => {
+        const item = list.find((x) => x.id === b.dataset.nid);
+        if (item) copyText(item.text).then(() => showToast('✅ تم نسخ الملاحظة'));
+      });
+    });
+    container.querySelectorAll('.note-del-btn').forEach((b) => {
+      b.addEventListener('click', () => {
+        saveNotes(getNotes().filter((x) => x.id !== b.dataset.nid));
+        renderNotesList();
+      });
+    });
+  }
+
+  function hideSelectionToolbar() {
+    const bar = $('selection-toolbar');
+    if (bar) bar.hidden = true;
+  }
+
+  function updateSelectionToolbar() {
+    if ($('reader-view').hidden || $('tab-content').hidden) { hideSelectionToolbar(); return; }
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) { hideSelectionToolbar(); return; }
+    const text = sel.toString().trim();
+    if (text.length < 2) { hideSelectionToolbar(); return; }
+    const range = sel.getRangeAt(0);
+    const body = $('report-body');
+    if (!body.contains(range.commonAncestorContainer)) { hideSelectionToolbar(); return; }
+
+    selectedTextCache = text;
+    const rect = range.getBoundingClientRect();
+    const bar = $('selection-toolbar');
+    bar.hidden = false;
+    const barW = bar.offsetWidth || 300;
+    const barH = bar.offsetHeight || 42;
+    let left = rect.left + rect.width / 2 - barW / 2;
+    left = Math.max(8, Math.min(window.innerWidth - barW - 8, left));
+    let top = rect.top - barH - 10;
+    if (top < 68) top = rect.bottom + 10;
+    top = Math.min(window.innerHeight - barH - 8, Math.max(66, top));
+    bar.style.left = `${Math.round(left)}px`;
+    bar.style.top = `${Math.round(top)}px`;
+  }
+
+  function initSelectionToolbar() {
+    let selTimer;
+    const scheduleUpdate = () => {
+      clearTimeout(selTimer);
+      selTimer = setTimeout(updateSelectionToolbar, 140);
+    };
+    document.addEventListener('mouseup', scheduleUpdate);
+    document.addEventListener('touchend', scheduleUpdate);
+    document.addEventListener('selectionchange', scheduleUpdate);
+
+    $('sel-copy').addEventListener('click', () => {
+      if (!selectedTextCache) return;
+      copyText(selectedTextCache).then(() => showToast('✅ تم نسخ النص المحدد'));
+      hideSelectionToolbar();
+    });
+
+    $('sel-note').addEventListener('click', () => {
+      if (!selectedTextCache || !currentReport) return;
+      const { secTitle } = getCurrentSectionInfo();
+      const notes = getNotes();
+      notes.unshift({
+        id: 'n_' + Date.now(),
+        reportId: currentReport.meta.id,
+        reportTitle: currentReport.title,
+        secTitle: secTitle || currentReport.title,
+        text: selectedTextCache,
+        createdAt: Date.now()
+      });
+      saveNotes(notes);
+      showToast('📝 تمت إضافة النص إلى الملاحظات');
+      hideSelectionToolbar();
+      window.getSelection()?.removeAllRanges();
+    });
+
+    $('sel-ai').addEventListener('click', () => {
+      if (!selectedTextCache) return;
+      $('ai-selected-quote').textContent = selectedTextCache;
+      $('ai-overlay').hidden = false;
+      hideSelectionToolbar();
+    });
+
+    $('sel-search').addEventListener('click', () => {
+      if (!selectedTextCache) return;
+      const q = selectedTextCache.slice(0, 60);
+      $('report-search').value = q;
+      runReportSearch(q);
+      hideSelectionToolbar();
+      window.getSelection()?.removeAllRanges();
+      showToast(`🔍 تم البحث عن "${q.slice(0, 22)}..." (${searchHits.length} نتيجة)`);
+    });
+
+    $('sel-close').addEventListener('click', () => {
+      hideSelectionToolbar();
+      window.getSelection()?.removeAllRanges();
+    });
+
+    // نافذة الملاحظات
+    $('btn-notes').addEventListener('click', () => {
+      renderNotesList();
+      $('notes-overlay').hidden = false;
+    });
+    $('btn-close-notes').addEventListener('click', () => { $('notes-overlay').hidden = true; });
+    $('notes-overlay').addEventListener('click', (e) => {
+      if (e.target === $('notes-overlay')) $('notes-overlay').hidden = true;
+    });
+    $('btn-copy-all-notes').addEventListener('click', () => {
+      const list = getNotes().filter((n) => !currentReport || n.reportId === currentReport.meta.id);
+      if (!list.length) { showToast('لا توجد ملاحظات لنسخها'); return; }
+      const txt = list.map((n, i) => `${i + 1}. [${n.secTitle}]\n${n.text}`).join('\n\n');
+      copyText(txt).then(() => showToast('✅ تم نسخ كل الملاحظات'));
+    });
+
+    // نافذة اسأل AI
+    const buildAiPrompt = () => `${$('ai-question-input').value.trim()}\n\n"${selectedTextCache}"`;
+    $('btn-close-ai').addEventListener('click', () => { $('ai-overlay').hidden = true; });
+    $('ai-overlay').addEventListener('click', (e) => {
+      if (e.target === $('ai-overlay')) $('ai-overlay').hidden = true;
+    });
+    $('btn-ai-chatgpt').addEventListener('click', () => {
+      const prompt = buildAiPrompt();
+      copyText(prompt);
+      window.open(`https://chatgpt.com/?q=${encodeURIComponent(prompt)}`, '_blank', 'noopener');
+    });
+    $('btn-ai-gemini').addEventListener('click', () => {
+      const prompt = buildAiPrompt();
+      copyText(prompt).then(() => {
+        showToast('✅ تم نسخ السؤال — الصقه في Gemini');
+        window.open('https://gemini.google.com/app', '_blank', 'noopener');
+      });
+    });
+    $('btn-ai-copy').addEventListener('click', () => {
+      copyText(buildAiPrompt()).then(() => showToast('✅ تم نسخ السؤال مع النص المحدد'));
+    });
+  }
+
+  /* ---------- 11. تهيئة الأحداث عند تشغيل الصفحة ---------- */
   function init() {
     initTheme();
     updateConnectionUI();
@@ -854,14 +1166,21 @@ $('btn-theme').onclick=()=>{
       clearSearchHighlights();
     });
 
-    // شريط تقدم القراءة وتحديث الفهرس النشط
+    // شريط تقدم القراءة وتحديث الفهرس النشط وحفظ موضع القراءة
+    let savePosTimer;
     window.addEventListener('scroll', () => {
       if ($('reader-view').hidden) return;
       const docH = document.documentElement.scrollHeight - window.innerHeight;
       const pct = docH > 0 ? Math.min(100, Math.max(0, (window.scrollY / docH) * 100)) : 0;
       $('read-progress-bar').style.width = pct + '%';
       updateActiveTOC();
+      clearTimeout(savePosTimer);
+      savePosTimer = setTimeout(saveReadPosition, 300);
     }, { passive: true });
+    window.addEventListener('beforeunload', saveReadPosition);
+    document.addEventListener('visibilitychange', () => { if (document.hidden) saveReadPosition(); });
+
+    initSelectionToolbar();
 
     // تهيئة حاسبات أدوات المزرعة
     ['calc-girth', 'calc-length', 'calc-yield-type'].forEach((id) =>

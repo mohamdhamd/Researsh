@@ -28,6 +28,9 @@
     </div>
 
     <div class="topbar-actions">
+      <button id="btn-notes" class="action-btn" title="ملاحظاتي المحفوظة" hidden>
+        <span>📝</span><span class="btn-label" id="notes-btn-label">الملاحظات</span>
+      </button>
       <button id="btn-glossary" class="action-btn" title="قاموس المصطلحات بالعامية" hidden>
         <span>💬</span><span class="btn-label">القاموس</span>
       </button>
@@ -66,6 +69,8 @@
         <span id="connection-pill" class="conn-pill">جاري فحص الاتصال...</span>
       </div>
     </section>
+
+    <section id="resume-last-card" class="resume-last-card" hidden></section>
 
     <section class="reports-section">
       <div class="section-head">
@@ -118,6 +123,7 @@
 
       <!-- تبويب 1: نص التقرير كامل -->
       <article id="tab-content" class="tab-panel active">
+        <div id="report-resume-banner" class="report-resume-banner" hidden></div>
         <div id="report-header-card" class="report-header-card"></div>
         <div class="popup-hint-banner">
           💡 <strong>تلميح سريع:</strong> أي كلمة لونها <span class="demo-term">بني/برتقالي وتحتها خط متقطع</span> اضغط عليها وهيطلعلك شرحها بالعامية المصرية فورًا.
@@ -261,6 +267,58 @@
         <div class="popup-block impact-block">
           <h4>💰 تفرق معاك في إيه في المزرعة؟</h4>
           <p id="popup-impact"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- شريط التحديد العائم (نسخ، ملاحظات، اسأل AI، بحث) -->
+  <div id="selection-toolbar" class="selection-toolbar" role="toolbar" aria-label="أدوات النص المحدد" hidden>
+    <button type="button" class="sel-btn" id="sel-copy"><span>📋</span><span>نسخ</span></button>
+    <span class="sel-sep"></span>
+    <button type="button" class="sel-btn sel-note" id="sel-note"><span>📝</span><span>+ الملاحظات</span></button>
+    <span class="sel-sep"></span>
+    <button type="button" class="sel-btn sel-ai" id="sel-ai"><span>✨</span><span>اسأل AI</span></button>
+    <span class="sel-sep"></span>
+    <button type="button" class="sel-btn" id="sel-search"><span>🔍</span><span>بحث</span></button>
+    <span class="sel-sep"></span>
+    <button type="button" class="sel-btn sel-close" id="sel-close" aria-label="إغلاق">✕</button>
+  </div>
+
+  <!-- نافذة الملاحظات المحفوظة -->
+  <div id="notes-overlay" class="modal-overlay" hidden>
+    <div class="glossary-modal" role="dialog" aria-modal="true" aria-labelledby="notes-modal-title">
+      <div class="popup-header">
+        <h3 id="notes-modal-title">📝 ملاحظاتي المحفوظة</h3>
+        <div style="display:flex;gap:6px;align-items:center">
+          <button id="btn-copy-all-notes" class="btn-outline small" type="button">📋 نسخ الكل</button>
+          <button id="btn-close-notes" class="icon-btn small" aria-label="إغلاق">✕</button>
+        </div>
+      </div>
+      <div id="notes-list" class="glossary-list"></div>
+    </div>
+  </div>
+
+  <!-- نافذة اسأل AI -->
+  <div id="ai-overlay" class="modal-overlay" hidden>
+    <div class="popup-sheet" role="dialog" aria-modal="true" aria-labelledby="ai-modal-title">
+      <div class="sheet-handle"></div>
+      <div class="popup-header">
+        <div>
+          <span class="popup-badge">✨ مساعد الذكاء الاصطناعي</span>
+          <h3 id="ai-modal-title">اسأل AI عن النص المحدد</h3>
+        </div>
+        <button id="btn-close-ai" class="icon-btn small" aria-label="إغلاق">✕</button>
+      </div>
+      <div class="popup-body">
+        <div class="ai-quote-box" id="ai-selected-quote"></div>
+        <label class="ai-prompt-label">سؤالك حول هذا الجزء:
+          <input type="text" id="ai-question-input" value="اشرح لي هذه النقطة ببساطة وكيف أطبقها عمليًا في المزرعة:" />
+        </label>
+        <div class="ai-actions-row">
+          <button type="button" id="btn-ai-chatgpt" class="btn-solid">🚀 فتح في ChatGPT</button>
+          <button type="button" id="btn-ai-gemini" class="btn-outline">✨ نسخ وفتح Gemini</button>
+          <button type="button" id="btn-ai-copy" class="btn-outline">📋 نسخ السؤال</button>
         </div>
       </div>
     </div>

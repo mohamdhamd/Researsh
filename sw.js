@@ -1,4 +1,4 @@
-const CACHE_NAME = 'farm-reports-hub-v4';
+const CACHE_NAME = 'farm-reports-hub-v5';
 
 const CORE_ASSETS = [
   './',
