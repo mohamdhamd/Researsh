@@ -1,4 +1,4 @@
-const CACHE_NAME = 'farm-reports-hub-v2';
+const CACHE_NAME = 'farm-reports-hub-v3';
 
 const CORE_ASSETS = [
   './',
@@ -8,8 +8,10 @@ const CORE_ASSETS = [
   './css/style.css',
   './js/app.js',
   './js/scene3d.js',
+  './js/lib/three.min.js',
   './data/reports-index.js',
   './data/reports/sharqia-calves.js',
+  './data/reports/sharqia-baladi-bulls.js',
   'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
 ];
 
@@ -42,9 +44,14 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// استقبال أمر "حفظ للأوفلاين" من الزرار جوه الموقع (يشمل أي تقارير جديدة)
+// استقبال أمر "حفظ للأوفلاين" أو تفعيل التحديث من الزرار جوه الموقع
 self.addEventListener('message', (event) => {
-  if (!event.data || event.data.type !== 'CACHE_ALL_OFFLINE') return;
+  if (!event.data) return;
+  if (event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+    return;
+  }
+  if (event.data.type !== 'CACHE_ALL_OFFLINE') return;
   const extraUrls = Array.isArray(event.data.urls) ? event.data.urls : [];
   const allUrls = Array.from(new Set([...CORE_ASSETS, ...extraUrls]));
 

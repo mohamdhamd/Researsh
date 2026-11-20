@@ -15,7 +15,12 @@
   <!-- شريط التنقل العلوي -->
   <header class="topbar">
     <div class="topbar-right">
-      <button id="btn-toc" class="icon-btn" title="فهرس الفصول" aria-label="فتح فهرس الفصول" hidden>☰</button>
+      <button id="btn-toc" class="action-btn" title="فهرس الفصول" aria-label="فتح فهرس الفصول" hidden>
+        <span>☰</span><span class="btn-label">الفهرس</span>
+      </button>
+      <button id="btn-back-home" class="action-btn" title="العودة إلى الصفحة الرئيسية ومكتبة التقارير" hidden>
+        <span>🏠</span><span class="btn-label">الرئيسية</span>
+      </button>
       <button id="btn-home" class="brand-btn" title="العودة لمكتبة التقارير">
         <span class="brand-logo">🌿</span>
         <span class="brand-text">موسوعة المزرعة</span>
@@ -26,8 +31,8 @@
       <button id="btn-glossary" class="action-btn" title="قاموس المصطلحات بالعامية" hidden>
         <span>💬</span><span class="btn-label">القاموس</span>
       </button>
-      <button id="btn-offline" class="action-btn action-primary" title="حفظ الموقع وكل التقارير على الموبايل للعمل بدون إنترنت">
-        <span>⬇️</span><span class="btn-label" id="offline-label">حفظ للأوفلاين</span>
+      <button id="btn-offline" class="action-btn action-primary" title="تحديث الموقع وحفظ كل التقارير على الموبايل للعمل بدون إنترنت">
+        <span>🔄</span><span class="btn-label" id="offline-label">تحديث / أوفلاين</span>
       </button>
       <button id="btn-export" class="action-btn" title="تحميل التقرير الحالي كملف HTML واحد مستقل" hidden>
         <span>📄</span><span class="btn-label">ملف واحد</span>
@@ -79,8 +84,14 @@
     <!-- القائمة الجانبية (فهرس الفصول) -->
     <aside id="toc-sidebar" class="toc-sidebar" aria-label="فهرس الفصول">
       <div class="toc-header">
-        <h3>فهرس الفصول</h3>
+        <div>
+          <h3>📑 فهرس التقرير</h3>
+          <span id="toc-count" class="toc-subtitle"></span>
+        </div>
         <button id="btn-close-toc" class="icon-btn small" aria-label="إغلاق الفهرس">✕</button>
+      </div>
+      <div class="toc-home-wrap">
+        <button id="btn-toc-home" class="toc-home-btn" type="button">🏠 العودة للصفحة الرئيسية (المكتبة)</button>
       </div>
       <div class="toc-search-box">
         <input type="search" id="report-search" placeholder="ابحث جوه التقرير (مثال: سيلاج، قلاعية)..." autocomplete="off" />

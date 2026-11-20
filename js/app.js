@@ -263,6 +263,7 @@
       $('library-view').hidden = true;
       $('reader-view').hidden = false;
       $('btn-toc').hidden = false;
+      $('btn-back-home').hidden = false;
       $('btn-glossary').hidden = false;
       $('btn-export').hidden = false;
       $('read-progress-wrap').hidden = false;
@@ -296,6 +297,7 @@
     $('reader-view').hidden = true;
     $('library-view').hidden = false;
     $('btn-toc').hidden = true;
+    $('btn-back-home').hidden = true;
     $('btn-glossary').hidden = true;
     $('btn-export').hidden = true;
     $('read-progress-wrap').hidden = true;
@@ -306,16 +308,37 @@
   function renderTOC(toc) {
     const nav = $('toc-list');
     nav.innerHTML = '';
-    toc.forEach((item) => {
+    const countEl = $('toc-count');
+    if (countEl) countEl.textContent = `${toc.length} قسم وفصل`;
+    toc.forEach((item, idx) => {
       const a = document.createElement('a');
       a.href = '#' + item.id;
-      a.className = 'toc-link' + (item.level === 3 ? ' sub' : '');
+      a.dataset.sec = item.id;
+      a.className = 'toc-link' + (item.level === 3 ? ' sub' : '') + (idx === 0 ? ' active' : '');
       a.textContent = item.title;
       a.addEventListener('click', () => {
         switchTab('content');
         closeTOC();
       });
       nav.appendChild(a);
+    });
+  }
+
+  function updateActiveTOC() {
+    if ($('reader-view').hidden || $('tab-content').hidden) return;
+    const headings = $('report-body').querySelectorAll('h2[id], h3[id]');
+    if (!headings.length) return;
+    let activeId = headings[0].id;
+    const offset = 110;
+    for (const h of headings) {
+      if (h.getBoundingClientRect().top <= offset) {
+        activeId = h.id;
+      } else {
+        break;
+      }
+    }
+    $('toc-list').querySelectorAll('.toc-link').forEach((link) => {
+      link.classList.toggle('active', link.dataset.sec === activeId);
     });
   }
 
@@ -590,11 +613,24 @@
     });
 
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('./sw.js').catch(() => {});
+      navigator.serviceWorker.register('./sw.js').then((reg) => {
+        reg.update().catch(() => {});
+        reg.addEventListener('updatefound', () => {
+          const nw = reg.installing;
+          if (!nw) return;
+          nw.addEventListener('statechange', () => {
+            if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+              nw.postMessage({ type: 'SKIP_WAITING' });
+              showToast('🔄 تم تنزيل تحديث جديد للتطبيق — أعد تحميل الصفحة أو اضغط «تحديث / أوفلاين».', 4500);
+            }
+          });
+        });
+      }).catch(() => {});
+
       navigator.serviceWorker.addEventListener('message', (event) => {
         if (event.data && event.data.type === 'OFFLINE_READY') {
-          $('offline-label').textContent = 'محفوظ أوفلاين ✓';
-          showToast(`✅ تم حفظ ${event.data.saved} ملفًا على موبايلك — تقدر تقفل النت وتشتغل أوفلاين تمامًا!`, 4200);
+          $('offline-label').textContent = 'محدّث وأوفلاين ✓';
+          showToast(`✅ تم تحديث وحفظ ${event.data.saved} ملفًا على موبايلك — تقدر تقفل النت وتشتغل أوفلاين تمامًا!`, 4200);
         }
       });
     }
@@ -608,11 +644,16 @@
         showToast('المتصفح لا يدعم Service Worker — استخدم زرار «ملف واحد» للتحميل أوفلاين.', 4000);
         return;
       }
-      showToast('⏳ جاري تحميل وحفظ كل التقارير والبيانات على موبايلك...', 2500);
+      showToast('⏳ جاري فحص التحديثات وحفظ كل التقارير والبيانات على موبايلك...', 2800);
       const reg = await navigator.serviceWorker.ready;
+      try {
+        await reg.update();
+        if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+      } catch (_) {}
       const reportUrls = (window.REPORTS_INDEX || []).map((r) => r.file);
-      if (reg.active) {
-        reg.active.postMessage({ type: 'CACHE_ALL_OFFLINE', urls: reportUrls });
+      const targetSw = reg.active || reg.waiting || reg.installing;
+      if (targetSw) {
+        targetSw.postMessage({ type: 'CACHE_ALL_OFFLINE', urls: reportUrls });
       }
     };
 
@@ -735,6 +776,8 @@ $('btn-theme').onclick=()=>{
 
     // التنقل والأزرار
     $('btn-home').addEventListener('click', showLibrary);
+    $('btn-back-home').addEventListener('click', showLibrary);
+    $('btn-toc-home').addEventListener('click', showLibrary);
     $('btn-toc').addEventListener('click', openTOC);
     $('btn-close-toc').addEventListener('click', closeTOC);
     $('toc-backdrop').addEventListener('click', closeTOC);
@@ -808,12 +851,13 @@ $('btn-theme').onclick=()=>{
       clearSearchHighlights();
     });
 
-    // شريط تقدم القراءة
+    // شريط تقدم القراءة وتحديث الفهرس النشط
     window.addEventListener('scroll', () => {
       if ($('reader-view').hidden) return;
       const docH = document.documentElement.scrollHeight - window.innerHeight;
       const pct = docH > 0 ? Math.min(100, Math.max(0, (window.scrollY / docH) * 100)) : 0;
       $('read-progress-bar').style.width = pct + '%';
+      updateActiveTOC();
     }, { passive: true });
 
     // تهيئة حاسبات أدوات المزرعة
