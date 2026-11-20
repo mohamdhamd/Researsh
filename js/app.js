@@ -259,7 +259,9 @@
       if (!data) throw new Error('بيانات التقرير غير موجودة.');
       currentReport = { meta, ...data };
 
-      // إظهار واجهة القراءة
+      // إظهار واجهة القراءة وإغلاق الفهرس افتراضيًا على الموبايل
+      closeTOC();
+      document.body.classList.add('is-reading');
       $('library-view').hidden = true;
       $('reader-view').hidden = false;
       $('btn-toc').hidden = false;
@@ -294,6 +296,7 @@
 
   function showLibrary() {
     if (window.BarnScene3D) window.BarnScene3D.stop();
+    document.body.classList.remove('is-reading');
     $('reader-view').hidden = true;
     $('library-view').hidden = false;
     $('btn-toc').hidden = true;
