@@ -1,0 +1,281 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#2d5a27" />
+  <meta name="description" content="منصة تقارير وأدلة المزارع العلمية والعملية — تعمل أوفلاين مع شرح تفاعلي بالعامية المصرية ومجسم 3D." />
+  <title>موسوعة المزرعة الذكية | تقارير عملية أوفلاين</title>
+  <link rel="manifest" href="./manifest.json" />
+  <link rel="icon" type="image/svg+xml" href="./icon.svg" />
+  <link rel="apple-touch-icon" href="./icon.svg" />
+  <link rel="stylesheet" href="./css/style.css" />
+</head>
+<body>
+  <!-- شريط التنقل العلوي -->
+  <header class="topbar">
+    <div class="topbar-right">
+      <button id="btn-toc" class="icon-btn" title="فهرس الفصول" aria-label="فتح فهرس الفصول" hidden>☰</button>
+      <button id="btn-home" class="brand-btn" title="العودة لمكتبة التقارير">
+        <span class="brand-logo">🌿</span>
+        <span class="brand-text">موسوعة المزرعة</span>
+      </button>
+    </div>
+
+    <div class="topbar-actions">
+      <button id="btn-glossary" class="action-btn" title="قاموس المصطلحات بالعامية" hidden>
+        <span>💬</span><span class="btn-label">القاموس</span>
+      </button>
+      <button id="btn-offline" class="action-btn action-primary" title="حفظ الموقع وكل التقارير على الموبايل للعمل بدون إنترنت">
+        <span>⬇️</span><span class="btn-label" id="offline-label">حفظ للأوفلاين</span>
+      </button>
+      <button id="btn-export" class="action-btn" title="تحميل التقرير الحالي كملف HTML واحد مستقل" hidden>
+        <span>📄</span><span class="btn-label">ملف واحد</span>
+      </button>
+      <button id="btn-install" class="action-btn action-accent" title="تثبيت التطبيق على الشاشة الرئيسية" hidden>
+        <span>📲</span><span class="btn-label">تثبيت</span>
+      </button>
+      <button id="btn-theme" class="icon-btn" title="تبديل الوضع الليلي" aria-label="تبديل الوضع الليلي">🌙</button>
+    </div>
+  </header>
+
+  <!-- شريط تقدم القراءة -->
+  <div class="read-progress-wrap" id="read-progress-wrap" hidden>
+    <div class="read-progress-bar" id="read-progress-bar"></div>
+  </div>
+
+  <!-- شريط حالة الاتصال -->
+  <div id="status-toast" class="status-toast" role="status" aria-live="polite" hidden></div>
+
+  <!-- عرض 1: مكتبة التقارير -->
+  <main id="library-view" class="library-view">
+    <section class="hero-card">
+      <div class="hero-badge">يعمل بدون إنترنت (PWA + Offline)</div>
+      <h1>مكتبة التقارير العلمية والعملية للمزارع</h1>
+      <p>
+        اختر التقرير اللي عايز تقرأه. أي مصطلح علمي تحته <span class="demo-term">خط متقطع برتقالي</span>
+        اضغط عليه وهتفتحلك نافذة تشرحهولك <strong>بالعامية المصرية</strong> وإزاي بيأثر على مكسبك.
+      </p>
+      <div class="hero-actions">
+        <button id="hero-offline-btn" class="btn-solid">⬇️ تحميل وحفظ كل التقارير على الموبايل (أوفلاين)</button>
+        <span id="connection-pill" class="conn-pill">جاري فحص الاتصال...</span>
+      </div>
+    </section>
+
+    <section class="reports-section">
+      <div class="section-head">
+        <h2>التقارير المتاحة</h2>
+        <span id="reports-count" class="count-chip">0</span>
+      </div>
+      <div id="reports-grid" class="reports-grid"></div>
+    </section>
+  </main>
+
+  <!-- عرض 2: قارئ التقرير الكامل -->
+  <div id="reader-view" class="reader-view" hidden>
+    <!-- خلفية مظللة للفهرس على الموبايل -->
+    <div id="toc-backdrop" class="backdrop" hidden></div>
+
+    <!-- القائمة الجانبية (فهرس الفصول) -->
+    <aside id="toc-sidebar" class="toc-sidebar" aria-label="فهرس الفصول">
+      <div class="toc-header">
+        <h3>فهرس الفصول</h3>
+        <button id="btn-close-toc" class="icon-btn small" aria-label="إغلاق الفهرس">✕</button>
+      </div>
+      <div class="toc-search-box">
+        <input type="search" id="report-search" placeholder="ابحث جوه التقرير (مثال: سيلاج، قلاعية)..." autocomplete="off" />
+        <div id="search-meta" class="search-meta" hidden>
+          <span id="search-count">0 نتيجة</span>
+          <div class="search-nav">
+            <button id="btn-prev-hit" type="button" title="السابق">▲</button>
+            <button id="btn-next-hit" type="button" title="التالي">▼</button>
+            <button id="btn-clear-search" type="button" title="مسح">✕</button>
+          </div>
+        </div>
+      </div>
+      <nav id="toc-list" class="toc-list"></nav>
+    </aside>
+
+    <!-- المحتوى الرئيسي للتقرير -->
+    <div class="reader-main">
+      <!-- شريط التبويبات داخل التقرير -->
+      <div class="reader-tabs" role="tablist">
+        <button class="tab-btn active" data-tab="content" role="tab" aria-selected="true">📖 التقرير كامل</button>
+        <button class="tab-btn" data-tab="scene3d" role="tab" aria-selected="false">🏗️ مجسم الحظيرة 3D</button>
+        <button class="tab-btn" data-tab="tools" role="tab" aria-selected="false">🧮 أدوات المزرعة</button>
+      </div>
+
+      <!-- تبويب 1: نص التقرير كامل -->
+      <article id="tab-content" class="tab-panel active">
+        <div id="report-header-card" class="report-header-card"></div>
+        <div class="popup-hint-banner">
+          💡 <strong>تلميح سريع:</strong> أي كلمة لونها <span class="demo-term">بني/برتقالي وتحتها خط متقطع</span> اضغط عليها وهيطلعلك شرحها بالعامية المصرية فورًا.
+        </div>
+        <div id="report-body" class="report-body"></div>
+      </article>
+
+      <!-- تبويب 2: مجسم الحظيرة Three.js 3D -->
+      <section id="tab-scene3d" class="tab-panel" hidden>
+        <div class="card-panel">
+          <div class="scene-head">
+            <div>
+              <h2>مجسم 3D تفاعلي: تصميم حظيرة التسمين في مناخ الشرقية (20 رأسًا)</h2>
+              <p class="muted">
+                اسحب بصباعك أو الماوس عشان تلف الحظيرة 360°، وكبّر/صغّر بالبكرة أو صباعين. راقب توجيه المظلة (شرق–غرب)،
+                الشخشيخة العلوية، اتجاه الرياح الشمالية الغربية، وفصل المعلف عن المشرب وحظيرة العزل.
+              </p>
+            </div>
+            <button id="btn-toggle-3d" class="btn-outline">⏸️ إيقاف الـ 3D (توفير البطارية)</button>
+          </div>
+
+          <div class="scene-controls">
+            <button class="mode-btn active" data-season="summer">☀️ صيف الشرقية (ذروة الحر THI &gt; 84 + تبريد)</button>
+            <button class="mode-btn" data-season="winter">❄️ شتاء الشرقية (شمس دافئة + صد الرياح)</button>
+            <button class="mode-btn" id="btn-reset-cam">🎯 إعادة ضبط الزاوية</button>
+          </div>
+
+          <div id="canvas3d-wrap" class="canvas3d-wrap">
+            <div id="scene3d-fallback" class="scene-fallback" hidden>
+              <p>مكتبة <strong>Three.js</strong> غير محمّلة حاليًا (أنت أوفلاين قبل أول تحميل).</p>
+              <p>افتح الموقع مرة واحدة بالإنترنت واضغط «حفظ للأوفلاين»، أو ضع ملف <code>three.min.js</code> جوه فولدر <code>js/lib/</code>.</p>
+            </div>
+            <div id="scene3d-hud" class="scene-hud">
+              <span id="hud-season-text">الوضع: صيف الشرقية — مراوح + رشاشات ممر الأكل فعّالة (بعيدًا عن المشرب والفرشة)</span>
+            </div>
+          </div>
+
+          <div class="scene-legend">
+            <span><i class="dot" style="background:#38bdf8"></i> تيار الهواء الشمالي الغربي</span>
+            <span><i class="dot" style="background:#eab308"></i> المعلف الطولي (11 مترًا / 55 سم للرأس)</span>
+            <span><i class="dot" style="background:#0284c7"></i> المشرب على بلاطة خرسانية منفصلة</span>
+            <span><i class="dot" style="background:#ef4444"></i> حظيرة العزل والحجر الصحي (21 يومًا)</span>
+            <span><i class="dot" style="background:#64748b"></i> ميل الصرف 2–4% + شخشيخة تهوية</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- تبويب 3: أدوات المزرعة التفاعلية (أوفلاين) -->
+      <section id="tab-tools" class="tab-panel" hidden>
+        <div class="tools-grid">
+          <!-- أداة 1: حاسبة وزن العجل بالمتر -->
+          <div class="card-panel tool-card">
+            <h3>📏 حاسبة وزن العجل بالمتر (معادلة شيفر)</h3>
+            <p class="muted">قِس محيط الصدر خلف الكتفين وطول الجسم من نقطة الكتف لنهاية المقعدة صباحًا قبل الأكل والشرب.</p>
+            <div class="form-grid">
+              <label>محيط الصدر (سم)<input type="number" id="calc-girth" value="136" min="60" max="260" step="1" /></label>
+              <label>طول الجسم (سم)<input type="number" id="calc-length" value="118" min="50" max="220" step="1" /></label>
+              <label>نوع العجل
+                <select id="calc-yield-type">
+                  <option value="0.55">بقري / خليط (تصافي ~55%)</option>
+                  <option value="0.52">جاموسي (تصافي ~52%)</option>
+                </select>
+              </label>
+            </div>
+            <div id="out-weight" class="tool-result"></div>
+          </div>
+
+          <!-- أداة 2: حاسبة مياه الشرب في الشرقية -->
+          <div class="card-panel tool-card">
+            <h3>💧 حاسبة مياه الشرب في الشرقية (NASEM)</h3>
+            <p class="muted">تحسب الاحتياج اليومي للرأس والقطيع وسعة الخزان المظلل (احتياطي يومين) حسب الجو.</p>
+            <div class="form-grid">
+              <label>متوسط وزن العجل (كجم)<input type="number" id="calc-w-bw" value="300" min="60" max="600" step="10" /></label>
+              <label>عدد الرؤوس<input type="number" id="calc-w-heads" value="20" min="1" max="500" step="1" /></label>
+              <label>الموسم / الحرارة بالشرقية
+                <select id="calc-w-temp">
+                  <option value="15">شتاء معتدل (15°م)</option>
+                  <option value="22">ربيع / خريف (22°م)</option>
+                  <option value="32" selected>صيف مظلل (32°م)</option>
+                  <option value="36">ذروة حر وموجة حارة (36°م)</option>
+                </select>
+              </label>
+            </div>
+            <div id="out-water" class="tool-result"></div>
+          </div>
+
+          <!-- أداة 3: حاسبة الجدوى ونقطة التعادل -->
+          <div class="card-panel tool-card tool-wide">
+            <h3>💰 حاسبة الجدوى الاقتصادية ونقطة التعادل (غيّر أسعار مركزك)</h3>
+            <p class="muted">الأرقام الافتراضية مطابقة لنموذج الدورة المتوسطة في التقرير (نوفمبر 2026) — عدّل أي رقم وهتتحسب فورًا.</p>
+            <div class="form-grid cols-4">
+              <label>عدد الرؤوس<input type="number" id="f-heads" value="20" min="1" /></label>
+              <label>وزن الشراء (كجم)<input type="number" id="f-wstart" value="200" min="50" /></label>
+              <label>وزن البيع (كجم)<input type="number" id="f-wend" value="425" min="150" /></label>
+              <label>الزيادة اليومية (كجم/ي)<input type="number" id="f-adg" value="1.25" step="0.05" min="0.4" /></label>
+              <label>سعر كجم الشراء (جنيه)<input type="number" id="f-pbuy" value="215" /></label>
+              <label>سعر كجم البيع (جنيه)<input type="number" id="f-psell" value="185" /></label>
+              <label>تكلفة العلف اليومي/رأس<input type="number" id="f-feed" value="105.5" step="0.5" /></label>
+              <label>نسبة النفوق المتوقعة (%)<input type="number" id="f-mort" value="2" step="0.5" min="0" max="30" /></label>
+              <label>عدد العمال<input type="number" id="f-workers" value="1" step="0.5" min="0" /></label>
+              <label>أجر العامل الشهري<input type="number" id="f-wage" value="7000" step="500" /></label>
+              <label>بيطري+نقل/رأس<input type="number" id="f-vet" value="2000" step="100" /></label>
+              <label>تأسيس حظيرة/رأس<input type="number" id="f-capex" value="12000" step="500" /></label>
+            </div>
+            <div id="out-fin" class="tool-result fin-result"></div>
+          </div>
+
+          <!-- أداة 4: قائمة فحص الشراء التفاعلية في السوق -->
+          <div class="card-panel tool-card tool-wide">
+            <div class="checklist-head">
+              <div>
+                <h3>✅ قائمة فحص العجل في السوق قبل الدفع</h3>
+                <p class="muted">علّم صح على كل بند سليم وإنت بتعاين العجل، والنظام هيديك قرار سريع (بتتحفظ على تليفونك).</p>
+              </div>
+              <button id="btn-reset-check" class="btn-outline small">إعادة التصفير</button>
+            </div>
+            <div id="market-checklist" class="checklist-grid"></div>
+            <div id="out-check" class="tool-result"></div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <!-- نافذة البوب-أب للشرح بالعامية المصرية -->
+  <div id="popup-overlay" class="modal-overlay" hidden>
+    <div class="popup-sheet" role="dialog" aria-modal="true" aria-labelledby="popup-title">
+      <div class="sheet-handle"></div>
+      <div class="popup-header">
+        <div>
+          <span class="popup-badge">شرح بالعامية المصرية 🇪🇬</span>
+          <h3 id="popup-title">عنوان المصطلح</h3>
+        </div>
+        <button id="btn-close-popup" class="icon-btn small" aria-label="إغلاق">✕</button>
+      </div>
+      <div class="popup-body">
+        <div class="popup-block baladi-block">
+          <h4>🗣️ يعني إيه الكلام ده بالبلدي؟</h4>
+          <p id="popup-baladi"></p>
+        </div>
+        <div class="popup-block impact-block">
+          <h4>💰 تفرق معاك في إيه في المزرعة؟</h4>
+          <p id="popup-impact"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- نافذة القاموس المركزي لكل المصطلحات -->
+  <div id="glossary-overlay" class="modal-overlay" hidden>
+    <div class="glossary-modal" role="dialog" aria-modal="true" aria-labelledby="glossary-modal-title">
+      <div class="popup-header">
+        <h3 id="glossary-modal-title">💬 قاموس المصطلحات بالعامية المصرية</h3>
+        <button id="btn-close-glossary" class="icon-btn small" aria-label="إغلاق">✕</button>
+      </div>
+      <div class="glossary-search-wrap">
+        <input type="search" id="glossary-search" placeholder="ابحث عن أي مصطلح (مثال: سرسوب، حموضة، تعادل)..." />
+      </div>
+      <div id="glossary-list" class="glossary-list"></div>
+    </div>
+  </div>
+
+  <!-- تحميل Three.js محليًا أولًا، ومعاه بديل تلقائي من CDN (والـ Service Worker بيحفظه أوفلاين) -->
+  <script src="./js/lib/three.min.js" onerror="var s=document.createElement('script');s.src='https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js';document.head.appendChild(s);"></script>
+
+  <!-- تحميل فهرس التقارير + التقرير الأول + المحرك ومشهد 3D -->
+  <script src="./data/reports-index.js"></script>
+  <script src="./data/reports/sharqia-calves.js"></script>
+  <script src="./js/scene3d.js"></script>
+  <script src="./js/app.js"></script>
+</body>
+</html>

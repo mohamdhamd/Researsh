@@ -1,0 +1,19 @@
+{
+  "name": "موسوعة المزرعة الذكية | تقارير عملية أوفلاين",
+  "short_name": "موسوعة المزرعة",
+  "description": "منصة تقارير وأدلة المزارع العلمية والعملية — تعمل أوفلاين مع شرح تفاعلي بالعامية المصرية ومجسم 3D.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "dir": "rtl",
+  "lang": "ar",
+  "background_color": "#f7f6f1",
+  "theme_color": "#2d5a27",
+  "icons": [
+    {
+      "src": "./icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
