@@ -712,6 +712,9 @@
 
   /* ---------- 9. PWA والأوفلاين وتصدير ملف HTML واحد مستقل ---------- */
   function initOfflinePWA() {
+    let swReg = null;
+    let swUpdated = false;
+
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       deferredInstallPrompt = e;
@@ -727,15 +730,17 @@
     });
 
     if ('serviceWorker' in navigator && location.protocol !== 'file:') {
-      navigator.serviceWorker.register('./sw.js').then((reg) => {
+      navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).then((reg) => {
+        swReg = reg;
         reg.update().catch(() => {});
         reg.addEventListener('updatefound', () => {
           const nw = reg.installing;
           if (!nw) return;
           nw.addEventListener('statechange', () => {
             if (nw.state === 'installed' && navigator.serviceWorker.controller) {
+              swUpdated = true;
               nw.postMessage({ type: 'SKIP_WAITING' });
-              showToast('🔄 تم تنزيل تحديث جديد للتطبيق — أعد تحميل الصفحة أو اضغط «تحديث / أوفلاين».', 4500);
+              showToast('🔄 تم تنزيل تحديث جديد للتطبيق — اضغط «تحديث / أوفلاين» أو أعد فتح الصفحة.', 4500);
             }
           });
         });
@@ -744,30 +749,124 @@
       navigator.serviceWorker.addEventListener('message', (event) => {
         if (event.data && event.data.type === 'OFFLINE_READY') {
           $('offline-label').textContent = 'محدّث وأوفلاين ✓';
-          showToast(`✅ تم تحديث وحفظ ${event.data.saved} ملفًا على موبايلك — تقدر تقفل النت وتشتغل أوفلاين تمامًا!`, 4200);
         }
       });
     }
+
+    const cacheDirectlyInWindow = async (urls) => {
+      if (!('caches' in window)) return { saved: 0, total: urls.length };
+      const keys = await caches.keys();
+      const targetCacheName = keys.find((k) => k.startsWith('farm-reports-hub-')) || 'farm-reports-hub-v7';
+      const cache = await caches.open(targetCacheName);
+      let saved = 0;
+      await Promise.all(
+        urls.map(async (url) => {
+          try {
+            const res = await fetch(url, { cache: 'reload' });
+            if (res && (res.ok || res.type === 'opaque')) {
+              await cache.put(url, res.clone());
+              saved++;
+            }
+          } catch (_) {}
+        })
+      );
+      return { saved, total: urls.length };
+    };
+
+    const sendCacheMsgToSw = (sw, urls, timeoutMs = 7000) =>
+      new Promise((resolve, reject) => {
+        const mc = new MessageChannel();
+        const timer = setTimeout(() => reject(new Error('sw-timeout')), timeoutMs);
+        mc.port1.onmessage = (ev) => {
+          clearTimeout(timer);
+          resolve(ev.data);
+        };
+        try {
+          sw.postMessage({ type: 'CACHE_ALL_OFFLINE', urls }, [mc.port2]);
+        } catch (err) {
+          clearTimeout(timer);
+          reject(err);
+        }
+      });
 
     const triggerOfflineSave = async () => {
       if (location.protocol === 'file:') {
         showToast('💡 أنت فاتح الموقع محليًا من ملفات الجهاز بالفعل — تقدر تستخدم زرار «ملف واحد» لتصدير نسخة مستقلة.', 4200);
         return;
       }
-      if (!('serviceWorker' in navigator)) {
-        showToast('المتصفح لا يدعم Service Worker — استخدم زرار «ملف واحد» للتحميل أوفلاين.', 4000);
+      if (!window.isSecureContext) {
+        showToast('⚠️ الحفظ الأوفلاين يتطلب فتح الموقع عبر HTTPS (مثل رابط GitHub Pages) أو localhost.', 4500);
         return;
       }
-      showToast('⏳ جاري فحص التحديثات وحفظ كل التقارير والبيانات على موبايلك...', 2800);
-      const reg = await navigator.serviceWorker.ready;
+      if (!navigator.onLine) {
+        showToast('📴 أنت أوفلاين حاليًا — البيانات المحفوظة على جهازك شغالة، وعند عودة النت اضغط لتحديثها.', 4200);
+        return;
+      }
+
+      const btn1 = $('btn-offline');
+      const btn2 = $('hero-offline-btn');
+      const prevLbl = $('offline-label').textContent;
+      btn1.disabled = true;
+      if (btn2) btn2.disabled = true;
+      $('offline-label').textContent = 'جاري التحديث...';
+      showToast('⏳ جاري فحص التحديثات وإعادة تحميل وحفظ كل البيانات أوفلاين...', 4000);
+
       try {
-        await reg.update();
-        if (reg.waiting) reg.waiting.postMessage({ type: 'SKIP_WAITING' });
-      } catch (_) {}
-      const reportUrls = (window.REPORTS_INDEX || []).map((r) => r.file);
-      const targetSw = reg.active || reg.waiting || reg.installing;
-      if (targetSw) {
-        targetSw.postMessage({ type: 'CACHE_ALL_OFFLINE', urls: reportUrls });
+        const coreUrls = [
+          './', './index.html', './manifest.json', './icon.svg',
+          './css/style.css', './js/app.js', './js/scene3d.js',
+          './js/lib/three.min.js', './data/reports-index.js'
+        ];
+        const reportUrls = (window.REPORTS_INDEX || []).map((r) => r.file);
+        const allUrls = Array.from(new Set([...coreUrls, ...reportUrls]));
+
+        let reg = swReg;
+        if (!reg && 'serviceWorker' in navigator) {
+          reg = await navigator.serviceWorker.getRegistration('./').catch(() => null);
+          if (!reg) reg = await navigator.serviceWorker.register('./sw.js', { updateViaCache: 'none' }).catch(() => null);
+        }
+
+        if (reg) {
+          try {
+            await reg.update();
+            if (reg.waiting) {
+              swUpdated = true;
+              reg.waiting.postMessage({ type: 'SKIP_WAITING' });
+            }
+          } catch (_) {}
+        }
+
+        const activeSw = (reg && (reg.active || reg.waiting)) || navigator.serviceWorker?.controller;
+        let stats = null;
+        if (activeSw) {
+          try {
+            stats = await sendCacheMsgToSw(activeSw, reportUrls, 7000);
+          } catch (_) {
+            stats = null;
+          }
+        }
+        if (!stats || !stats.saved) {
+          stats = await cacheDirectlyInWindow(allUrls);
+        }
+
+        if (stats.saved > 0) {
+          $('offline-label').textContent = 'محدّث وأوفلاين ✓';
+          showToast(`✅ تم تحديث وحفظ ${stats.saved} ملفًا على جهازك — جاري تطبيق أحدث نسخة...`, 3200);
+          setTimeout(() => {
+            if (swUpdated || !$('library-view').hidden) {
+              location.reload();
+            }
+          }, 900);
+        } else {
+          $('offline-label').textContent = prevLbl;
+          showToast('⚠️ تعذر تحميل الملفات حاليًا — تأكد من الاتصال بالإنترنت وحاول مرة أخرى.', 4000);
+        }
+      } catch (err) {
+        $('offline-label').textContent = prevLbl;
+        showToast('❌ تعذر التحديث: ' + (err.message || 'خطأ غير متوقع'), 4000);
+      } finally {
+        btn1.disabled = false;
+        if (btn2) btn2.disabled = false;
       }
     };
 

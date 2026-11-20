@@ -1,4 +1,4 @@
-const CACHE_NAME = 'farm-reports-hub-v6';
+const CACHE_NAME = 'farm-reports-hub-v7';
 
 const CORE_ASSETS = [
   './',
@@ -12,21 +12,30 @@ const CORE_ASSETS = [
   './data/reports-index.js',
   './data/reports/sharqia-calves.js',
   './data/reports/sharqia-baladi-bulls.js',
-  './data/reports/menoufia-beef-dairy-2026.js',
-  'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
+  './data/reports/menoufia-beef-dairy-2026.js'
 ];
 
+const IMMUTABLE_PATHS = ['/js/lib/three.min.js', 'cdnjs.cloudflare.com'];
+
 async function cacheUrlsSafely(cache, urls) {
-  const results = await Promise.allSettled(
+  let saved = 0;
+  let failed = 0;
+  await Promise.all(
     urls.map(async (url) => {
-      const req = new Request(url, { cache: 'reload' });
-      const res = await fetch(req);
-      if (res && (res.ok || res.type === 'opaque')) {
+      try {
+        const req = new Request(url, { cache: 'reload' });
+        const res = await fetch(req);
+        if (!res || (!res.ok && res.type !== 'opaque')) {
+          throw new Error('Bad response');
+        }
         await cache.put(url, res.clone());
+        saved++;
+      } catch (_) {
+        failed++;
       }
     })
   );
-  return results.filter((r) => r.status === 'fulfilled').length;
+  return { saved, failed, total: urls.length };
 }
 
 self.addEventListener('install', (event) => {
@@ -58,32 +67,73 @@ self.addEventListener('message', (event) => {
 
   event.waitUntil(
     caches.open(CACHE_NAME).then(async (cache) => {
-      const saved = await cacheUrlsSafely(cache, allUrls);
+      const stats = await cacheUrlsSafely(cache, allUrls);
+      const payload = { type: 'OFFLINE_READY', ...stats };
+      if (event.ports && event.ports[0]) {
+        event.ports[0].postMessage(payload);
+      }
       const clients = await self.clients.matchAll();
-      clients.forEach((client) =>
-        client.postMessage({ type: 'OFFLINE_READY', saved, total: allUrls.length })
-      );
+      clients.forEach((client) => client.postMessage(payload));
     })
   );
 });
 
-// استراتيجية: الكاش أولًا للأوفلاين السريع + تحديث في الخلفية لو فيه إنترنت
+function fetchWithTimeout(request, ms = 3500) {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout')), ms);
+    fetch(request)
+      .then((res) => {
+        clearTimeout(timer);
+        resolve(res);
+      })
+      .catch((err) => {
+        clearTimeout(timer);
+        reject(err);
+      });
+  });
+}
+
+// استراتيجية ذكية:
+// - مكتبة Three.js الضخمة: كاش أولًا للسرعة
+// - ملفات الموقع والتقارير: الشبكة أولًا (بحد أقصى 3.5 ثانية) لتنزيل التحديثات فورًا، مع الرجوع للكاش أوفلاين
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  const url = event.request.url;
+  if (!url.startsWith('http')) return;
 
-  event.respondWith(
-    caches.match(event.request).then((cached) => {
-      const networkFetch = fetch(event.request)
-        .then((res) => {
+  const isImmutable = IMMUTABLE_PATHS.some((p) => url.includes(p));
+  if (isImmutable) {
+    event.respondWith(
+      caches.match(event.request, { ignoreSearch: true }).then((cached) => {
+        if (cached) return cached;
+        return fetch(event.request).then((res) => {
           if (res && (res.ok || res.type === 'opaque')) {
             const copy = res.clone();
             caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
           }
           return res;
-        })
-        .catch(() => cached);
+        });
+      })
+    );
+    return;
+  }
 
-      return cached || networkFetch;
-    })
+  event.respondWith(
+    fetchWithTimeout(event.request, 3500)
+      .then((res) => {
+        if (res && (res.ok || res.type === 'opaque')) {
+          const copy = res.clone();
+          event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy)));
+        }
+        return res;
+      })
+      .catch(async () => {
+        const cached = await caches.match(event.request, { ignoreSearch: true });
+        if (cached) return cached;
+        if (event.request.mode === 'navigate') {
+          return caches.match('./index.html');
+        }
+        return Response.error();
+      })
   );
 });
